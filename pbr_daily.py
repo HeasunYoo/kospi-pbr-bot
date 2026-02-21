@@ -106,13 +106,13 @@ def main():
         f"{header}\n"
         "📌 <KOSPI PBR>\n\n"
         f"📅 기준일: {fmt_date_only(last_date)}\n"
-        f"📈 종가: {last_close}\n"
-        f"🏷️ PBR: {two(last_pbr)}\n\n"
+        f"📈 KOSPI 종가 지수: {last_close}\n"
+        f"🏷️ 오늘의 PBR: {two(last_pbr)}\n\n"
         "🧾 <최근 10년 PBR>\n"
         f"📊 평균: {two(avg10)}\n"
         f"🔻 최저: {two(min10)} ({fmt_date_only(dmin)})\n"
         f"🔺 최고: {two(max10)} ({fmt_date_only(dmax)})\n\n"
-        "✅ 조건: 0.84 이하 or 1.6 이상\n"
+        "✅ 0.84 이하만 하단에 매수신호 뜸!\n"
     )
 
     if last_pbr == last_pbr and (float(last_pbr) <= LOW):
