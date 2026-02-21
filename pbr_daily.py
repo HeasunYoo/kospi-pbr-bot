@@ -58,10 +58,13 @@ def main():
     kst = now_kst()
     today = kst.date()
 
-    # 주말/공휴일 스킵
-    if not is_korea_business_day(today):
+     force = os.getenv("FORCE_SEND", "0") == "1"  # ✅ 추가
+
+    # ✅ 주말/공휴일 스킵 (단, force면 스킵 안 함)
+    if (not force) and (not is_korea_business_day(today)):
         print("Skip: weekend/holiday in Korea")
         return
+    
 
     # 지수 ticker 찾기
     itickers = pkstock.get_index_ticker_list(market=MARKET)
@@ -108,4 +111,5 @@ def main():
     send_telegram(msg)
 
 if __name__ == "__main__":
+    
     main()
