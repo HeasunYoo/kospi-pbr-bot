@@ -116,7 +116,7 @@ def main():
     )
 
     if last_pbr == last_pbr and (float(last_pbr) <= LOW or float(last_pbr) >= HIGH):
-        msg += f"\n🚨 조건 충족! 현재 PBR={two(last_pbr)}"
+        msg += f"\n🚨🚨 조건 충족! 현재 PBR={two(last_pbr)} 🚨🚨"
 
     send_telegram(msg)
 
