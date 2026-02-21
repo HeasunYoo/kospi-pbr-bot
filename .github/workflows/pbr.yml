@@ -2,7 +2,8 @@ name: KOSPI PBR Daily
 
 on:
   schedule:
-    - cron: "30 23 * * *"   # 한국시간 08:30
+    - cron: "30 23 * * 1-5"  # 08:30 KST (월~금)
+    - cron: "0 7 * * 1-5"    # 16:00 KST (월~금)
   workflow_dispatch:
 
 jobs:
