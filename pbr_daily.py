@@ -115,8 +115,11 @@ def main():
         "✅ 조건: 0.84 이하 or 1.6 이상\n"
     )
 
-    if last_pbr == last_pbr and (float(last_pbr) <= LOW or float(last_pbr) >= HIGH):
-        msg += f"\n🚨🚨 조건 충족! 현재 PBR={two(last_pbr)} 🚨🚨"
+    if last_pbr == last_pbr and (float(last_pbr) <= LOW):
+        msg += (
+            f"\n🚨🚨 조건 충족! 현재 PBR={two(last_pbr)} 🚨🚨"
+            f"\n🚨🚨 강력 매수 신호 🚨🚨"
+        )
 
     send_telegram(msg)
 
