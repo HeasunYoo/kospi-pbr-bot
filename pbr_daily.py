@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, date
 import numpy as np
 import pandas as pd
 import requests
-import holidays  # ✅ 공휴일 체크용
+import holidays
 from pykrx import stock as pkstock
 
 MARKET = "KOSPI"
@@ -22,35 +22,43 @@ def two(x):
     return f"{float(x):.2f}"
 
 def fmt_date_only(d):
-    """YYYY-MM-DD (시간 제거)"""
-    # pykrx index가 'YYYYMMDD' 문자열일 때
     s = str(d)
     if len(s) == 8 and s.isdigit():
         return f"{s[:4]}-{s[4:6]}-{s[6:]}"
-    # Timestamp/Datetime일 때
     try:
         return pd.Timestamp(d).date().isoformat()
     except Exception:
         return s
 
 def is_korea_business_day(today: date) -> bool:
-    """월~금 + 한국 공휴일 제외"""
-    if today.weekday() >= 5:  # 5=토, 6=일
+    if today.weekday() >= 5:
         return False
     kr_holidays = holidays.KR(years=today.year)
     return today not in kr_holidays
 
+def now_kst():
+    # GitHub Actions(ubuntu)는 보통 UTC라서 KST로 강제 변환
+    return datetime.utcnow() + timedelta(hours=9)
+
+def run_label(kst_dt: datetime) -> str:
+    hhmm = kst_dt.strftime("%H:%M")
+    # 스케줄이 08:30 / 16:00 이니까 라벨링
+    if kst_dt.hour < 12:
+        return f"🌅 오전 알림 ({hhmm} KST)"
+    return f"🌇 오후 알림 ({hhmm} KST)"
+
 def send_telegram(text: str):
     if not BOT_TOKEN or not CHAT_ID:
         raise RuntimeError("GitHub Secrets에 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID를 설정해야 합니다.")
-
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     r = requests.post(url, json={"chat_id": CHAT_ID, "text": text})
     r.raise_for_status()
 
 def main():
-    # ✅ 공휴일/주말이면 아예 전송하지 않음
-    today = datetime.now().date()
+    kst = now_kst()
+    today = kst.date()
+
+    # 주말/공휴일 스킵
     if not is_korea_business_day(today):
         print("Skip: weekend/holiday in Korea")
         return
@@ -79,9 +87,11 @@ def main():
     dmin = pbr_series.idxmin()
     dmax = pbr_series.idxmax()
 
-    # ✅ 이모지 + 문구 변경(요구사항 1,3)
+    header = run_label(kst)
+
     msg = (
-        "📌 <KOSPI PBR 알림>\n\n"
+        f"{header}\n"
+        "📌 <KOSPI PBR>\n\n"
         f"📅 기준일: {fmt_date_only(last_date)}\n"
         f"📈 종가: {last_close}\n"
         f"🏷️ PBR: {two(last_pbr)}\n\n"
@@ -92,7 +102,6 @@ def main():
         "✅ 조건: 0.84 이하 or 1.6 이상\n"
     )
 
-    # 조건 충족 시 추가 알림
     if last_pbr == last_pbr and (float(last_pbr) <= LOW or float(last_pbr) >= HIGH):
         msg += f"\n🚨 조건 충족! 현재 PBR={two(last_pbr)}"
 
