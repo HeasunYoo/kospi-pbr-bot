@@ -26,5 +26,5 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          # 테스트 용 한번 보내기 FORCE_SEND: "1"
+          FORCE_SEND: "1"
         run: python pbr_daily.py
