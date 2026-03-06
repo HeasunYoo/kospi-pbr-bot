@@ -40,7 +40,7 @@ def is_korea_business_day(today: date) -> bool:
 
 
 def now_kst() -> datetime:
-    return datetime.utcnow() + timedelta(hours=9)
+    return datetime.now(datetime.UTC) + timedelta(hours=9)
 
 
 def run_label(kst_dt: datetime) -> str:
