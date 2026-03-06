@@ -1,4 +1,4 @@
-name: KOSPI PBR Daily
+name: KOSPI PBR Daily v2
 
 on:
   schedule:
