@@ -9,9 +9,9 @@ import holidays
 from pykrx import stock as pkstock
 
 
-# ======================
+# =====================
 # 설정
-# ======================
+# =====================
 
 INDEX_TICKER = "1001"   # KOSPI index ticker (고정)
 LOW = 0.84
@@ -20,17 +20,17 @@ BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
 CHAT_ID = (os.getenv("TELEGRAM_CHAT_ID") or "").strip()
 
 
-# ======================
+# =====================
 # 시간
-# ======================
+# =====================
 
 def now_kst():
     return datetime.now(ZoneInfo("Asia/Seoul"))
 
 
-# ======================
+# =====================
 # 유틸
-# ======================
+# =====================
 
 def two(x):
 
@@ -74,9 +74,9 @@ def run_label(kst_dt: datetime):
     return f"🌇 오후 알림 ({hhmm} KST)"
 
 
-# ======================
+# =====================
 # Telegram
-# ======================
+# =====================
 
 def send_telegram(text):
 
@@ -96,18 +96,18 @@ def send_telegram(text):
     r.raise_for_status()
 
 
-# ======================
-# PBR percentile 계산
-# ======================
+# =====================
+# percentile 계산
+# =====================
 
 def percentile_rank(series, value):
 
     return (series < value).mean() * 100
 
 
-# ======================
-# PBR 상태
-# ======================
+# =====================
+# valuation 상태
+# =====================
 
 def valuation_state(pbr):
 
@@ -123,9 +123,9 @@ def valuation_state(pbr):
     return "🔴 고평가 구간"
 
 
-# ======================
+# =====================
 # 메인
-# ======================
+# =====================
 
 def main():
 
@@ -138,41 +138,75 @@ def main():
         print("Skip: weekend/holiday")
         return
 
-    today_str = kst.strftime("%Y%m%d")
+
+    # 항상 어제 데이터 사용 (KRX 업데이트 안정)
+    to_date = (kst - timedelta(days=1)).strftime("%Y%m%d")
 
     from_date = (kst - timedelta(days=365 * 10 + 10)).strftime("%Y%m%d")
 
+
     df = pkstock.get_index_fundamental(
         from_date,
-        today_str,
+        to_date,
         INDEX_TICKER
-    )[["종가", "PBR"]].copy()
+    )
+
+
+    # 데이터 없는 경우
+    if df.empty:
+        print("KRX 데이터 없음")
+        return
+
+
+    required_cols = ["종가", "PBR"]
+
+    missing = [c for c in required_cols if c not in df.columns]
+
+    if missing:
+        raise RuntimeError(f"KRX 데이터 구조 변경: {missing}")
+
+
+    df = df[required_cols].copy()
 
     df.replace(0, np.nan, inplace=True)
 
+
     last_date = df.index[-1]
+
     last_close = float(df["종가"].iloc[-1])
+
     last_pbr = float(df["PBR"].iloc[-1])
+
 
     pbr_series = df["PBR"].dropna()
 
     avg10 = float(pbr_series.mean())
+
     min10 = float(pbr_series.min())
+
     max10 = float(pbr_series.max())
 
     dmin = pbr_series.idxmin()
+
     dmax = pbr_series.idxmax()
+
 
     pct = percentile_rank(pbr_series, last_pbr)
 
     state = valuation_state(last_pbr)
 
+
     if last_pbr > 0:
+
         target_index = last_close * (LOW / last_pbr)
+
     else:
+
         target_index = np.nan
 
+
     header = run_label(kst)
+
 
     report_msg = (
 
@@ -203,7 +237,9 @@ def main():
         f"PBR 0.84 도달 지수 : {two(target_index)}\n"
     )
 
+
     send_telegram(report_msg)
+
 
     if last_pbr <= LOW:
 
@@ -221,7 +257,7 @@ def main():
         send_telegram(alert_msg)
 
 
-# ======================
+# =====================
 
 if __name__ == "__main__":
     main()
