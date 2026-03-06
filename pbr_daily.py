@@ -128,7 +128,8 @@ def valuation_state(pbr):
 # =====================
 
 def main():
-
+    send_telegram("🧪 테스트 메시지입니다")
+    
     kst = now_kst()
     today = kst.date()
 
