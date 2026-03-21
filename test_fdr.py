@@ -1,16 +1,24 @@
 import FinanceDataReader as fdr
 
-tests = [
-    ("KS11", "20250101", "20250320"),
-    ("KOSPI/PBR", "20250101", "20250320"),
+# 종가 테스트
+print("=== KS11 종가 ===")
+df = fdr.DataReader("KS11", "20250101", "20250320")
+print(f"rows={len(df)}, cols={list(df.columns)}")
+if not df.empty:
+    print(df.tail(2))
+
+# PBR 소스 테스트
+sources = [
+    "KRX/INDEX/KOSPI",
+    "NAVER/INDEX/KOSPI",
 ]
 
-for sym, s, e in tests:
+for sym in sources:
+    print(f"\n=== {sym} ===")
     try:
-        df = fdr.DataReader(sym, s, e)
-        print(f"OK {sym}: rows={len(df)}, cols={list(df.columns)}")
+        df = fdr.DataReader(sym, "20250101", "20250320")
+        print(f"rows={len(df)}, cols={list(df.columns)}")
         if not df.empty:
-            print(f"   last: {df.index[-1]}")
-            print(df.tail(3))
-    except Exception as ex:
-        print(f"FAIL {sym}: {ex}")
+            print(df.tail(2))
+    except Exception as e:
+        print(f"FAIL: {e}")
