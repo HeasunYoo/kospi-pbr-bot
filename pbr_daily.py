@@ -1,19 +1,18 @@
 import os
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
-from io import StringIO
 
 import numpy as np
 import pandas as pd
 import requests
 import holidays
+import FinanceDataReader as fdr
 
 
 # =====================
 # 설정
 # =====================
 
-INDEX_TICKER = "1001"
 LOW = 0.84
 
 BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or "").strip()
@@ -82,98 +81,67 @@ def send_telegram(text):
 
 
 # =====================
-# KRX OTP 방식으로 데이터 가져오기
+# 데이터 가져오기 (FinanceDataReader)
 # =====================
 
 def get_kospi_pbr_data(from_date: str, to_date: str) -> pd.DataFrame:
-    """KRX 공식 OTP 2단계 방식으로 KOSPI PBR 데이터 가져오기"""
+    """FinanceDataReader로 KOSPI PBR 데이터 가져오기"""
 
-    otp_url = "http://data.krx.co.kr/comm/fileDn/GenerateOTP/generate.cmd"
-    otp_payload = {
-        "locale": "ko_KR",
-        "idxIndMidclssCd": "01",
-        "strtDd": from_date,
-        "endDd": to_date,
-        "share": "2",
-        "money": "3",
-        "csvxls_isNo": "false",
-        "name": "fileDown",
-        "url": "dbms/MDC/STAT/standard/MDCSTAT00601",
-    }
-    headers = {
-        "Referer": "http://data.krx.co.kr/contents/MDC/STAT/standard/MDCSTAT00601.cmd",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    }
+    print(f"[INFO] FinanceDataReader로 데이터 조회: {from_date} ~ {to_date}")
 
-    # 1단계: OTP 코드 발급
-    otp_r = requests.post(otp_url, data=otp_payload, headers=headers, timeout=30)
-    otp_r.raise_for_status()
-    otp_code = otp_r.text.strip()
+    # KOSPI 지수 데이터 (종가 포함)
+    df = fdr.DataReader("KS11", from_date, to_date)
 
-    print(f"[INFO] OTP 코드 발급 완료: {otp_code[:20]}...")
-
-    # 2단계: CSV 다운로드
-    down_url = "http://data.krx.co.kr/comm/fileDn/download_csv/download.cmd"
-    down_r = requests.post(
-        down_url,
-        data={"code": otp_code},
-        headers=headers,
-        timeout=30,
-    )
-    down_r.raise_for_status()
-
-    # CSV 파싱
-    csv_text = down_r.content.decode("euc-kr")
-    df = pd.read_csv(StringIO(csv_text))
-
-    print(f"[INFO] CSV 컬럼: {list(df.columns)}")
-    print(f"[INFO] CSV rows: {len(df)}")
+    print(f"[INFO] KS11 rows: {len(df)}, columns: {list(df.columns)}")
 
     if df.empty:
         return pd.DataFrame()
 
-    # 컬럼 자동 탐지
-    date_col = df.columns[0]
+    # 종가 컬럼 확인
+    close_col = None
+    for c in ["Close", "종가", "close"]:
+        if c in df.columns:
+            close_col = c
+            break
 
-    idx_candidates = [c for c in df.columns if any(k in c for k in ["지수명", "IDX_NM", "종목명"])]
-    pbr_candidates = [c for c in df.columns if "PBR" in c.upper()]
-    close_candidates = [c for c in df.columns if any(k in c for k in ["종가", "CLSPRC", "지수"])]
-
-    if not pbr_candidates:
-        print(f"[ERROR] PBR 컬럼 없음. 전체 컬럼: {list(df.columns)}")
+    if close_col is None:
+        print(f"[ERROR] 종가 컬럼 없음. 전체 컬럼: {list(df.columns)}")
         return pd.DataFrame()
 
-    pbr_col = pbr_candidates[0]
-    close_col = close_candidates[0] if close_candidates else None
+    df = df[[close_col]].rename(columns={close_col: "종가"})
+    df = df.replace(0, np.nan).dropna()
 
-    # 코스피만 필터
-    if idx_candidates:
-        idx_col = idx_candidates[0]
-        df = df[df[idx_col].astype(str).str.contains("코스피", na=False)]
+    # PBR 데이터 가져오기
+    try:
+        pbr_df = fdr.DataReader("KOSPI/PBR", from_date, to_date)
+        print(f"[INFO] PBR rows: {len(pbr_df)}, columns: {list(pbr_df.columns)}")
 
-    if df.empty:
+        if not pbr_df.empty:
+            pbr_col = pbr_df.columns[0]
+            pbr_df = pbr_df[[pbr_col]].rename(columns={pbr_col: "PBR"})
+            pbr_df["PBR"] = pd.to_numeric(pbr_df["PBR"], errors="coerce")
+            df = df.join(pbr_df, how="inner")
+
+    except Exception as e:
+        print(f"[WARN] PBR 직접 조회 실패: {e}, NAVER 방식으로 시도")
+        try:
+            pbr_df = fdr.DataReader("NAVER/INDEX/KOSPI", from_date, to_date)
+            print(f"[INFO] NAVER rows: {len(pbr_df)}, columns: {list(pbr_df.columns)}")
+            pbr_candidates = [c for c in pbr_df.columns if "PBR" in str(c).upper()]
+            if pbr_candidates:
+                pbr_df = pbr_df[[pbr_candidates[0]]].rename(columns={pbr_candidates[0]: "PBR"})
+                pbr_df["PBR"] = pd.to_numeric(pbr_df["PBR"], errors="coerce")
+                df = df.join(pbr_df, how="inner")
+        except Exception as e2:
+            print(f"[ERROR] PBR fallback도 실패: {e2}")
+            return pd.DataFrame()
+
+    if "PBR" not in df.columns:
+        print("[ERROR] PBR 컬럼 최종 없음")
         return pd.DataFrame()
-
-    # 날짜 파싱
-    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
-    df = df.dropna(subset=[date_col])
-    df = df.set_index(date_col)
-    df = df.sort_index()
-
-    # PBR 숫자 변환
-    df["PBR"] = pd.to_numeric(
-        df[pbr_col].astype(str).str.replace(",", ""), errors="coerce"
-    )
-
-    # 종가 숫자 변환
-    if close_col:
-        df["종가"] = pd.to_numeric(
-            df[close_col].astype(str).str.replace(",", ""), errors="coerce"
-        )
-    else:
-        df["종가"] = np.nan
 
     result = df[["종가", "PBR"]].replace(0, np.nan).dropna()
+    print(f"[INFO] 최종 데이터: {len(result)} rows")
     return result
 
 
