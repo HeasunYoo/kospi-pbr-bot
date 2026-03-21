@@ -2,5 +2,4 @@ pandas
 numpy
 requests
 holidays
-lxml
-html5lib
+finance-datareader
