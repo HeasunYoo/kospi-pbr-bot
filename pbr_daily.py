@@ -85,15 +85,12 @@ def send_telegram(text):
 # =====================
 
 def get_kospi_pbr_data(from_date: str, to_date: str) -> pd.DataFrame:
-    """KRX API를 직접 호출해서 KOSPI PBR 데이터 가져오기"""
-
     url = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
 
     payload = {
         "bld": "dbms/MDC/STAT/standard/MDCSTAT00601",
         "locale": "ko_KR",
         "idxIndMidclssCd": "01",
-        "trdDd": to_date,
         "strtDd": from_date,
         "endDd": to_date,
         "share": "2",
@@ -103,7 +100,8 @@ def get_kospi_pbr_data(from_date: str, to_date: str) -> pd.DataFrame:
 
     headers = {
         "Referer": "http://data.krx.co.kr/contents/MDC/STAT/standard/MDCSTAT00601.cmd",
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+        "Content-Type": "application/x-www-form-urlencoded",
     }
 
     r = requests.post(url, data=payload, headers=headers, timeout=30)
@@ -117,7 +115,6 @@ def get_kospi_pbr_data(from_date: str, to_date: str) -> pd.DataFrame:
     rows = []
     for item in data["output"]:
         try:
-            # KOSPI 지수만 필터
             if item.get("IDX_NM", "") != "코스피":
                 continue
             trd_dd = item.get("TRD_DD", "").replace("/", "").replace("-", "")
@@ -235,8 +232,6 @@ def main():
         )
         send_telegram(alert_msg)
 
-
-# =====================
 
 if __name__ == "__main__":
     main()
