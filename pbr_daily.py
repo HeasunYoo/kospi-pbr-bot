@@ -143,7 +143,8 @@ def main():
     to_date = (kst - timedelta(days=1)).strftime("%Y%m%d")
 
     from_date = (kst - timedelta(days=365 * 10 + 10)).strftime("%Y%m%d")
-
+    
+    print(f"[DEBUG] 조회 기간: {from_date} ~ {to_date}")  # ← 추가
 
     df = pkstock.get_index_fundamental(
         from_date,
@@ -151,10 +152,13 @@ def main():
         INDEX_TICKER
     )
 
+     print(f"[DEBUG] df.shape: {df.shape}, columns: {list(df.columns)}")  # ← 추가
+    
 
     # 데이터 없는 경우
     if df.empty:
         print("KRX 데이터 없음")
+        send_telegram("⚠️ KRX 데이터 없음 - 봇 확인 필요")  # ← 추가
         return
 
 
