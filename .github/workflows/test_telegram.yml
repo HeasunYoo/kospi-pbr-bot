@@ -1,0 +1,30 @@
+name: Telegram Test
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install requests
+      - name: Test Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -c "
+          import os, requests
+          token = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+          chat_id = os.getenv('TELEGRAM_CHAT_ID', '').strip()
+          print(f'TOKEN 길이: {len(token)}')
+          print(f'CHAT_ID: {chat_id}')
+          r = requests.post(
+              f'https://api.telegram.org/bot{token}/sendMessage',
+              json={'chat_id': chat_id, 'text': '🧪 GitHub Actions 테스트 메시지!'}
+          )
+          print(r.status_code, r.json())
+          "
