@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
+from io import StringIO
 
 import numpy as np
 import pandas as pd
@@ -81,14 +82,14 @@ def send_telegram(text):
 
 
 # =====================
-# KRX 직접 API 호출
+# KRX OTP 방식으로 데이터 가져오기
 # =====================
 
 def get_kospi_pbr_data(from_date: str, to_date: str) -> pd.DataFrame:
-    url = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
+    """KRX 공식 OTP 2단계 방식으로 KOSPI PBR 데이터 가져오기"""
 
-    payload = {
-        "bld": "dbms/MDC/STAT/standard/MDCSTAT00601",
+    otp_url = "http://data.krx.co.kr/comm/fileDn/GenerateOTP/generate.cmd"
+    otp_payload = {
         "locale": "ko_KR",
         "idxIndMidclssCd": "01",
         "strtDd": from_date,
@@ -96,43 +97,84 @@ def get_kospi_pbr_data(from_date: str, to_date: str) -> pd.DataFrame:
         "share": "2",
         "money": "3",
         "csvxls_isNo": "false",
+        "name": "fileDown",
+        "url": "dbms/MDC/STAT/standard/MDCSTAT00601",
     }
-
     headers = {
         "Referer": "http://data.krx.co.kr/contents/MDC/STAT/standard/MDCSTAT00601.cmd",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-        "Content-Type": "application/x-www-form-urlencoded",
     }
 
-    r = requests.post(url, data=payload, headers=headers, timeout=30)
-    r.raise_for_status()
+    # 1단계: OTP 코드 발급
+    otp_r = requests.post(otp_url, data=otp_payload, headers=headers, timeout=30)
+    otp_r.raise_for_status()
+    otp_code = otp_r.text.strip()
 
-    data = r.json()
+    print(f"[INFO] OTP 코드 발급 완료: {otp_code[:20]}...")
 
-    if "output" not in data or not data["output"]:
+    # 2단계: CSV 다운로드
+    down_url = "http://data.krx.co.kr/comm/fileDn/download_csv/download.cmd"
+    down_r = requests.post(
+        down_url,
+        data={"code": otp_code},
+        headers=headers,
+        timeout=30,
+    )
+    down_r.raise_for_status()
+
+    # CSV 파싱
+    csv_text = down_r.content.decode("euc-kr")
+    df = pd.read_csv(StringIO(csv_text))
+
+    print(f"[INFO] CSV 컬럼: {list(df.columns)}")
+    print(f"[INFO] CSV rows: {len(df)}")
+
+    if df.empty:
         return pd.DataFrame()
 
-    rows = []
-    for item in data["output"]:
-        try:
-            if item.get("IDX_NM", "") != "코스피":
-                continue
-            trd_dd = item.get("TRD_DD", "").replace("/", "").replace("-", "")
-            close = float(item.get("CLSPRC_IDX", "0").replace(",", ""))
-            pbr = float(item.get("PBR", "0").replace(",", ""))
-            if pbr == 0:
-                continue
-            rows.append({"날짜": trd_dd, "종가": close, "PBR": pbr})
-        except Exception:
-            continue
+    # 컬럼 자동 탐지
+    date_col = df.columns[0]
 
-    if not rows:
+    idx_candidates = [c for c in df.columns if any(k in c for k in ["지수명", "IDX_NM", "종목명"])]
+    pbr_candidates = [c for c in df.columns if "PBR" in c.upper()]
+    close_candidates = [c for c in df.columns if any(k in c for k in ["종가", "CLSPRC", "지수"])]
+
+    if not pbr_candidates:
+        print(f"[ERROR] PBR 컬럼 없음. 전체 컬럼: {list(df.columns)}")
         return pd.DataFrame()
 
-    df = pd.DataFrame(rows)
-    df["날짜"] = pd.to_datetime(df["날짜"], format="%Y%m%d")
-    df = df.set_index("날짜").sort_index()
-    return df
+    pbr_col = pbr_candidates[0]
+    close_col = close_candidates[0] if close_candidates else None
+
+    # 코스피만 필터
+    if idx_candidates:
+        idx_col = idx_candidates[0]
+        df = df[df[idx_col].astype(str).str.contains("코스피", na=False)]
+
+    if df.empty:
+        return pd.DataFrame()
+
+    # 날짜 파싱
+    df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+    df = df.dropna(subset=[date_col])
+    df = df.set_index(date_col)
+    df = df.sort_index()
+
+    # PBR 숫자 변환
+    df["PBR"] = pd.to_numeric(
+        df[pbr_col].astype(str).str.replace(",", ""), errors="coerce"
+    )
+
+    # 종가 숫자 변환
+    if close_col:
+        df["종가"] = pd.to_numeric(
+            df[close_col].astype(str).str.replace(",", ""), errors="coerce"
+        )
+    else:
+        df["종가"] = np.nan
+
+    result = df[["종가", "PBR"]].replace(0, np.nan).dropna()
+    return result
 
 
 # =====================
