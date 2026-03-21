@@ -146,13 +146,9 @@ def main():
     
     print(f"[DEBUG] 조회 기간: {from_date} ~ {to_date}")  # ← 추가
 
-    df = pkstock.get_index_fundamental(
-        from_date,
-        to_date,
-        INDEX_TICKER
-    )
+    df = pkstock.get_index_fundamental(from_date, to_date, INDEX_TICKER)
 
-     print(f"[DEBUG] df.shape: {df.shape}, columns: {list(df.columns)}")  # ← 추가
+    print(f"[DEBUG] df.shape: {df.shape}, columns: {list(df.columns)}")  # ← 추가
     
 
     # 데이터 없는 경우
